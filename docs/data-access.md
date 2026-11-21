@@ -11,12 +11,16 @@ this repository, and none should be.
   public option is the AMP trials (HVTN 704 and HVTN 703), with 60 and 47
   infections in the VRC01 arms. That is roughly double HVTN 505 per side, enough
   for a first E2 that is not purely plumbing, but intervals will still be wide.
-- **The best gated route changed.** ENSEMBLE (VAC31518COV3001, 44,325
-  enrolled) is now listed on the YODA Project as an available trial with
-  "Collected Datasets Available" **[v]**. That is a standard sponsor
-  data-sharing route, separate from a CoVPN proposal. The open question is
-  whether the Day 29 antibody markers from the correlates case-cohort are in the
-  J&J datasets. Ask YODA that before writing a full proposal.
+- **ENSEMBLE is easier to reach but smaller than hoped.** ENSEMBLE
+  (VAC31518COV3001, 44,325 enrolled) is now listed on the YODA Project as an
+  available trial with "Collected Datasets Available" **[v]**. That is a
+  standard sponsor data-sharing route, separate from a CoVPN proposal. But its
+  Day 29 correlates analysis had only 92 vaccine breakthrough cases with
+  antibody data (Fong et al. 2022), so a region split gives about 30 per side.
+  It is worth having for E1, not as the route to 100 per side.
+- **For 100 per side, look at Vivli.** The dengue trials CYD14/CYD15 (PRNT50)
+  and RTS,S phase 3 (anti-CSP subset) are the likeliest candidates. Their sizes
+  are from memory and not yet verified.
 - **One structural check first.** YODA and the HVTN Dataverse licence both
   exclude commercial use, and YODA requires the PI to sit at an academic,
   research, healthcare or government institution that co-signs the DUA. Settle
@@ -52,7 +56,7 @@ ethics restrictions). The CoVPN analysis code is public
 
 ## 4. Gated routes, in order of payoff per effort
 
-### A. ENSEMBLE through YODA (Johnson & Johnson) — try first
+### A. ENSEMBLE through YODA (Johnson & Johnson)
 
 Listing: yoda.yale.edu, NCT04505722 / VAC31518COV3001 **[v]**. ENSEMBLE 2
 (VAC31518COV3009, two doses, 31,831 enrolled) is also listed **[v]**; its
@@ -164,7 +168,26 @@ Write one master proposal and adapt it per route.
 - **Timeline and dissemination.** Preprint plus peer-reviewed paper; credit
   lines as the provider requires.
 
-## 6. Recommended next steps
+## 6. Result at about 50 per side (AMP, 2026-11-21)
+
+E2 on AMP, fit in one trial and applied to the other, with model-predicted
+VRC01 concentration (mean and 10th percentile over the at-risk window) as the
+markers. Phase two: 59/44 cases and 44/45 controls, with IPW weights rebuilt.
+1,000 bootstrap reps each way. Aggregate outputs are in the project files
+under `e2-amp/`.
+
+- **No marker signal at home.** The baseline AUC was 0.53 (704) and 0.41
+  (703). Ridge shrank to intercept-only when fit on 704. This is the known AMP
+  biology: VRC01 did not prevent HIV acquisition overall, only acquisition of
+  sensitive viruses (IC80 < 1 µg/mL), and there are too few of those to model.
+- **What the run does tell us is precision.** At about 50 cases per side, the
+  95% interval on the calibration-intercept penalty spans about ±0.6 to ±0.7
+  on the logit scale, and the AUC penalty about ±0.25. A transfer penalty
+  smaller than that cannot be detected at this size, whatever the data.
+- So a dataset is only useful if it has both enough events *and* a marker
+  that predicts the endpoint at home.
+
+## 7. Recommended next steps
 
 1. **Now, free:** download AMP (`GDESJI`, `50VH2C`) and HVTN 702 (`JI2FUM`)
    from the HVTN Dataverse. The guestbook asks for the downloader's own name
