@@ -13,6 +13,12 @@ Dials (composable, any combination):
   "Measured differently."
 * ``population`` shift in the target's baseline log-odds. "Different people."
 * ``noise``      SD of extra measurement error on every target marker.
+* ``attack_rate`` shift in the target's log-odds of exposure, applied to
+  vaccinees *and* to the placebo arm. "Different epidemic." This is the
+  part of a baseline shift that a placebo arm can see; ``population`` is the
+  part it cannot (it acts on vaccinees only). Keeping them apart is what lets
+  the placebo-incidence offset in :mod:`penalty.transfer` separate exposure
+  from everything else (literature review, section 4).
 
 :func:`case_cohort` turns a full cohort into a two-phase release with the
 sampling weights a real correlates dataset would carry.
@@ -28,6 +34,7 @@ import pandas as pd
 P = 8
 BETA = np.array([1.1, -0.8, 0.6, 0.0, 0.45, 0.0, -0.3, 0.2])
 INTERCEPT = -1.2
+PLACEBO_INTERCEPT = -0.4  # placebo-arm log-odds of the endpoint in the source
 
 
 @dataclass(frozen=True)
@@ -36,6 +43,7 @@ class Gap:
     assay: float = 0.0
     population: float = 0.0
     noise: float = 0.0
+    attack_rate: float = 0.0
 
     def as_dict(self):
         return asdict(self)
@@ -49,11 +57,26 @@ def rotation(theta: float, p: int = P) -> np.ndarray:
     return r
 
 
-def _cohort(n, beta, intercept, gap: Gap, rng, study_id, stratum, prefix):
+LOG_BASE_HAZARD = -1.6   # survival mode: about 25% events by FOLLOW_UP in the source
+FOLLOW_UP = 1.0
+DROPOUT_RATE = 0.1
+PLACEBO_LOG_HAZARD = -0.8
+
+
+def _cohort(n, beta, intercept, gap: Gap, rng, study_id, stratum, prefix, survival=False):
     cov = 0.3 ** np.abs(np.subtract.outer(np.arange(P), np.arange(P)))
     x = rng.multivariate_normal(np.zeros(P), cov, size=n)
-    eta = x @ beta + intercept + gap.population
-    y = rng.binomial(1, 1 / (1 + np.exp(-eta)))
+    if survival:
+        # Proportional hazards; the dials act on the log hazard exactly as they
+        # act on the log-odds in binary mode.
+        rate = np.exp(x @ beta + LOG_BASE_HAZARD + gap.population + gap.attack_rate)
+        t_event = rng.exponential(1 / rate)
+        t_cens = np.minimum(FOLLOW_UP, rng.exponential(1 / DROPOUT_RATE, n))
+        y = (t_event <= t_cens).astype(int)
+        time = np.minimum(t_event, t_cens)
+    else:
+        eta = x @ beta + intercept + gap.population + gap.attack_rate
+        y = rng.binomial(1, 1 / (1 + np.exp(-eta)))
     # Measurement artefacts act on what is recorded, not on the biology that
     # generated the outcome.
     if gap.noise:
@@ -66,24 +89,43 @@ def _cohort(n, beta, intercept, gap: Gap, rng, study_id, stratum, prefix):
     df.insert(2, "stratum", stratum)
     df.insert(3, "platform", "synthetic")
     df["endpoint"] = y
+    if survival:
+        df["time_to_event"] = time
     df["sampling_weight"] = 1.0
     return df
 
 
 def make_studies(n_source: int, n_target: int, gap: Gap = Gap(), rng=None,
-                 same_study: bool = True):
+                 same_study: bool = True, survival: bool = False):
     """Return (source, target) tidy frames separated by ``gap``.
 
     With ``same_study`` both frames share a study_id and differ by stratum
     (the E2 shape). Otherwise they get distinct study_ids (the E1 shape).
+    With ``survival`` the endpoint comes from a proportional-hazards model
+    with dropout and administrative censoring at ``FOLLOW_UP``, and the frames
+    carry ``time_to_event``.
     """
     rng = rng if rng is not None else np.random.default_rng()
     beta_t = rotation(gap.mechanism) @ BETA
-    src = _cohort(n_source, BETA, INTERCEPT, Gap(), rng, "SIM-A", "source", "S")
+    src = _cohort(n_source, BETA, INTERCEPT, Gap(), rng, "SIM-A", "source", "S", survival)
     tgt = _cohort(n_target, beta_t, INTERCEPT, gap, rng,
-                  "SIM-A" if same_study else "SIM-B", "target", "T")
-    # The noise/assay artefacts above must not apply to the source.
+                  "SIM-A" if same_study else "SIM-B", "target", "T", survival)
     return src, tgt
+
+
+def placebo_incidence(n: int, gap: Gap = Gap(), rng=None, survival: bool = False) -> float:
+    """Observed endpoint rate in a placebo arm of size ``n``.
+
+    Placebo recipients carry no vaccine-induced marker signal, so their risk
+    depends on exposure (``attack_rate``) only. In survival mode it is the
+    fraction with an event by ``FOLLOW_UP`` under a constant hazard.
+    """
+    rng = rng if rng is not None else np.random.default_rng()
+    if survival:
+        p = 1 - np.exp(-np.exp(PLACEBO_LOG_HAZARD + gap.attack_rate) * FOLLOW_UP)
+    else:
+        p = 1 / (1 + np.exp(-(PLACEBO_INTERCEPT + gap.attack_rate)))
+    return float(rng.binomial(n, p) / n)
 
 
 def case_cohort(df: pd.DataFrame, subcohort_frac: float, rng=None,
