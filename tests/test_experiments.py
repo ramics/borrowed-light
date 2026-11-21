@@ -50,6 +50,11 @@ def test_e2_runs_end_to_end_and_writes_manifest(tmp_path):
     e2_within_study.main([str(path), "--data", str(data), "--out", str(out)])
     pen = pd.read_csv(out / "penalties.csv")
     assert {"auc", "c_index", "cal_intercept_exposure_adjusted"} <= set(pen["metric"])
+    rep = (out / "report.md").read_text()
+    headings = [l for l in rep.splitlines() if l.startswith("## ")]
+    assert headings.index("## Calibration (headline)") < headings.index("## Discrimination")
+    assert "## Decisions" in headings and "## Read this first" in headings
+    assert "flip_fixed" in set(pen["metric"])
     m = (out / "manifest.json").read_text()
     assert "sha256" in m and str(data) not in m  # fingerprint, not location
 

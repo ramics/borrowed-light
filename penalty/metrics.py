@@ -135,10 +135,71 @@ def evaluate(y, p, w=None) -> dict[str, float]:
 # difference keeps the bootstrap well behaved near zero, which |.| does not.
 
 def penalty(baseline: dict[str, float], target: dict[str, float]) -> dict[str, float]:
+    extra = {k: target[k] - baseline[k] for k in DECISION_METRICS if k in baseline and k in target}
     return {
         "auc": baseline["auc"] - target["auc"],
         "brier": target["brier"] - baseline["brier"],
         "cal_intercept": target["cal_intercept"] - baseline["cal_intercept"],
         "cal_slope": target["cal_slope"] - baseline["cal_slope"],
         "cal_intercept_joint": target["cal_intercept_joint"] - baseline["cal_intercept_joint"],
-    }
+    } | extra
+
+
+# ----------------------------------------------------------------------------
+# Decision level: does the borrowed model put the threshold in the wrong place?
+# ----------------------------------------------------------------------------
+#
+# Admissibility is a threshold decision ("is this person's predicted risk
+# below r*?", or "is this marker response above the cut?"), so the spec asks
+# for the fraction of decisions that change across the gap. Two versions, side
+# by side, because they answer different questions (SPEC.md, open question 2):
+#
+# * ``flip_fixed``: a fixed risk threshold r*, set before the target is seen.
+#   The borrowed model's call (p >= r*) is compared with the call the same
+#   model makes once recalibrated (weighted intercept + slope) to the
+#   population being evaluated. It counts the people whose decision moves
+#   only because the risk scale is wrong there. It is zero when the model is
+#   calibrated, whatever its AUC.
+# * ``flip_optimal``: the cut that is optimal (weighted Youden) in the source
+#   training data, compared with the cut that would be optimal in the
+#   population being evaluated, both applied to the same scores. It counts
+#   the people whose decision moves because the best place for the line has
+#   moved.
+#
+# Both are weighted fractions of the evaluation population. Their penalty is
+# target - baseline, so positive means more decisions flip across the gap.
+
+DECISION_METRICS = ("flip_fixed", "flip_optimal")
+
+
+def youden_cut(y, p, w=None) -> float:
+    """Score cut c maximising weighted sensitivity + specificity for p >= c."""
+    y, p, w = _as_arrays(y, p, w)
+    if len(np.unique(y)) < 2:
+        return np.nan
+    order = np.argsort(-p, kind="mergesort")
+    p, y, w = p[order], y[order], w[order]
+    uniq, start = np.unique(-p, return_index=True)
+    tp = np.cumsum(np.add.reduceat(np.where(y == 1, w, 0.0), start)) / w[y == 1].sum()
+    fp = np.cumsum(np.add.reduceat(np.where(y == 0, w, 0.0), start)) / w[y == 0].sum()
+    best = int(np.argmax(tp - fp))
+    return float(-uniq[best])
+
+
+def recalibrate(y, p, w=None) -> np.ndarray:
+    """Logistic recalibration (intercept and slope) of p to outcomes y."""
+    y, p, w = _as_arrays(y, p, w)
+    b = _weighted_logistic(_lp(p)[:, None], y, w)
+    return expit(b[0] + b[1] * _lp(p))
+
+
+def decision_flip(y, p, w, risk_threshold: float, source_cut: float) -> dict[str, float]:
+    y, p, w = _as_arrays(y, p, w)
+    out = {"flip_fixed": np.nan, "flip_optimal": np.nan}
+    if len(np.unique(y)) < 2:
+        return out
+    p_cal = recalibrate(y, p, w)
+    out["flip_fixed"] = float(np.average((p >= risk_threshold) != (p_cal >= risk_threshold), weights=w))
+    here = youden_cut(y, p, w)
+    out["flip_optimal"] = float(np.average((p >= source_cut) != (p >= here), weights=w))
+    return out
