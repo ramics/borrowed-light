@@ -24,6 +24,15 @@ def _git(*args) -> str | None:
 
 
 def file_digest(path: Path) -> str:
+    """SHA-256 of a file, or of a directory's files (relative names + bytes,
+    in sorted order)."""
+    path = Path(path)
+    if path.is_dir():
+        h = hashlib.sha256()
+        for f in sorted(p for p in path.rglob("*") if p.is_file()):
+            h.update(str(f.relative_to(path)).encode())
+            h.update(bytes.fromhex(file_digest(f)))
+        return h.hexdigest()
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):

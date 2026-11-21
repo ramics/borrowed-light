@@ -1,7 +1,7 @@
 """E2, within-study population transfer.
 
     python -m experiments.e2_within_study experiments/configs/e2_hvtn505_age.yaml \
-        --data /path/outside/repo/hvtn505.rda [--out reports/<run>] [--reps N]
+        --data /path/outside/repo/<file or directory> [--out reports/<run>] [--reps N]
 
 Fits each configured model on the source stratum, measures it at home and on
 the target stratum, and bootstraps every penalty. Writes to the output
@@ -100,7 +100,8 @@ def run(config: dict, data: Path, reps: int | None = None) -> dict:
 def summary_md(config: dict, res: dict) -> str:
     pen = res["penalties"]
     lines = [f"# E2: {config['dataset']} — {config['source']} → {config['target']}", "",
-             f"Split on `{config['split']['column']}` at {config['split']['cut']}. "
+             f"Split on `{config['split']['column']}`"
+             f"{' at ' + str(config['split']['cut']) if 'cut' in config['split'] else ''}. "
              f"Baseline: {config.get('baseline', 'holdout')}. "
              f"{res['reps']} participant-level bootstrap replicates; "
              f"{int(100 * (1 - config.get('alpha', 0.05)))}% percentile intervals.", "",

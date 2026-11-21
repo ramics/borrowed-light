@@ -1,0 +1,17 @@
+# E2 on AMP (VRC01 infusions): fit in the HVTN704 VRC01 arms, transfer to HVTN703.
+# HVTN704 = men and transgender people, Americas and Switzerland; HVTN703 =
+# women, sub-Saharan Africa. Markers are dose/adherence proxies (see
+# experiments/loaders.py::amp). Data path supplied at run time; the release's
+# datasets/ directory.
+experiment: e2_within_study
+dataset: amp
+split: {column: trial}
+source: HVTN704
+target: HVTN703
+models: [ridge_logistic, single_marker, ridge_cox]
+baseline: cv
+folds: 5
+bootstrap_reps: 1000
+alpha: 0.05
+seed: 20261121
+placebo_offset: true
