@@ -1,0 +1,15 @@
+# E2 on HVTN 505: fit in vaccinees under 30, transfer to vaccinees 30 and over.
+# The data path is supplied at run time (--data or BORROWED_LIGHT_DATA); it is
+# never written into a config or the repository.
+experiment: e2_within_study
+dataset: hvtn505
+split: {column: age, cut: 30, labels: [age_18_29, age_30_50]}
+source: age_18_29
+target: age_30_50
+models: [ridge_logistic, single_marker, ridge_cox]
+baseline: cv          # 25 phase-two cases in all; a single holdout would leave ~4
+folds: 5
+bootstrap_reps: 1000
+alpha: 0.05
+seed: 20261121
+placebo_offset: true
