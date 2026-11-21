@@ -278,7 +278,7 @@ This is where the estimator's definitions should come from.
 
 ## 7. Candidate participant-level datasets for E2
 
-Ranked by how quickly they can produce a first real result.
+Ranked by how quickly they can produce a first real result. See `docs/data-access.md` for the 2026-11-21 public-data search and step-by-step access routes.
 
 | Dataset | Access | Why it fits E2 | Limitations |
 | --- | --- | --- | --- |

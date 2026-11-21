@@ -1,0 +1,18 @@
+# E2 on AMP (VRC01 infusions) with model-predicted serum VRC01 concentration
+# (PT80 release, doi:10.7910/DVN/50VH2C): fit in the HVTN704 VRC01 arms,
+# transfer to HVTN703. Case-control phase two with reconstructed IPW weights
+# (see experiments/loaders.py::amp). Data path at run time: a directory
+# holding the primary-results and PT80 files.
+experiment: e2_within_study
+dataset: amp
+loader_options: {markers: pk}
+split: {column: trial}
+source: HVTN704
+target: HVTN703
+models: [ridge_logistic, single_marker, ridge_cox]
+baseline: cv
+folds: 5
+bootstrap_reps: 1000
+alpha: 0.05
+seed: 20261121
+placebo_offset: true
