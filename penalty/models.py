@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from scipy.special import expit
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 
 from . import schema
@@ -55,13 +54,28 @@ class FittedModel:
         return expit(self.linear_predictor(df))
 
 
-def _fit_ridge(x, y, w, C):
-    # sklearn's objective is C * sum(w_i * loss_i) + 0.5 ||beta||^2, so the
-    # effective penalty depends on the total weight. Normalising the weights to
-    # mean 1 makes C mean the same thing whatever the sampling fractions were.
+def _fit_ridge(x, y, w, C, b0=None, iters=100, tol=1e-9):
+    """Minimise C * sum(w_i * logloss_i) + 0.5 ||beta||^2 (intercept free),
+    the same objective as sklearn's L2 LogisticRegression, by Newton-Raphson.
+
+    Weights are normalised to mean 1 first, so C means the same thing whatever
+    the sampling fractions were. Hand-rolled because at p ~ 10 sklearn's
+    per-call overhead dominated the bootstrap's runtime.
+    """
     wn = w / w.mean()
-    m = LogisticRegression(C=C, max_iter=5000, tol=1e-8).fit(x, y, sample_weight=wn)
-    return float(m.intercept_[0]), m.coef_[0].copy()
+    X = np.column_stack([np.ones(len(y)), x])
+    pen = np.ones(X.shape[1])
+    pen[0] = 0.0
+    b = np.zeros(X.shape[1]) if b0 is None else b0.copy()
+    for _ in range(iters):
+        mu = expit(X @ b)
+        g = C * (X.T @ (wn * (y - mu))) - pen * b
+        H = C * ((X * (wn * mu * (1 - mu))[:, None]).T @ X) + np.diag(pen)
+        step = np.linalg.solve(H + 1e-12 * np.eye(len(b)), g)
+        b = b + step
+        if np.max(np.abs(step)) < tol:
+            break
+    return float(b[0]), b[1:].copy()
 
 
 def fit_ridge_logistic(source: pd.DataFrame, markers=None, c_grid=DEFAULT_C_GRID,
@@ -73,11 +87,11 @@ def fit_ridge_logistic(source: pd.DataFrame, markers=None, c_grid=DEFAULT_C_GRID
     z = (x - centre) / scale
 
     k = int(min(folds, np.bincount(y, minlength=2).min()))
-    if k < 2:
+    if len(c_grid) > 1 and k < 2:
         raise ValueError("need at least two cases and two non-cases to tune the penalty")
-    cv = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)
     losses = np.zeros(len(c_grid))
-    for tr, te in cv.split(z, y):
+    splits = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed).split(z, y) if len(c_grid) > 1 else ()
+    for tr, te in splits:
         mu, sd = _weighted_standardiser(x[tr], w[tr])
         ztr, zte = (x[tr] - mu) / sd, (x[te] - mu) / sd
         for i, C in enumerate(c_grid):
@@ -95,7 +109,7 @@ def fit_ridge_logistic(source: pd.DataFrame, markers=None, c_grid=DEFAULT_C_GRID
 
 
 def fit_best_single_marker(source: pd.DataFrame, markers=None, folds: int = 5,
-                           seed: int = 0) -> FittedModel:
+                           seed: int = 0, **_ignored) -> FittedModel:
     """The comparator: the one marker with the lowest weighted CV log loss,
     fitted by unpenalised weighted logistic regression."""
     markers = tuple(markers or schema.marker_columns(source))
