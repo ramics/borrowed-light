@@ -25,4 +25,6 @@ packages = ["penalty", "sim"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# experiments/ is run from the checkout, not installed.
+pythonpath = ["."]
 addopts = "-q"
