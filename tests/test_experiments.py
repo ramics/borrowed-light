@@ -50,6 +50,11 @@ def test_e2_runs_end_to_end_and_writes_manifest(tmp_path):
     e2_within_study.main([str(path), "--data", str(data), "--out", str(out)])
     pen = pd.read_csv(out / "penalties.csv")
     assert {"auc", "c_index", "cal_intercept_exposure_adjusted"} <= set(pen["metric"])
+    rep = (out / "report.md").read_text()
+    headings = [l for l in rep.splitlines() if l.startswith("## ")]
+    assert headings.index("## Calibration (headline)") < headings.index("## Discrimination")
+    assert "## Decisions" in headings and "## Read this first" in headings
+    assert "flip_fixed" in set(pen["metric"])
     m = (out / "manifest.json").read_text()
     assert "sha256" in m and str(data) not in m  # fingerprint, not location
 
@@ -57,3 +62,14 @@ def test_e2_runs_end_to_end_and_writes_manifest(tmp_path):
 def test_refuses_data_inside_repo():
     with pytest.raises(SystemExit, match="AC7"):
         e2_within_study._refuse_in_repo(e2_within_study.REPO / "data" / "x.csv")
+
+
+def test_report_handles_a_categorical_split():
+    from experiments import report
+    res = {"penalties": pd.DataFrame(columns=["model", "metric", "baseline", "target", "penalty",
+                                              "lo", "hi", "covers_zero", "valid_reps"]),
+           "source": dict(n_phase1=10, n_phase2=10, cases=5, cases_phase2=5),
+           "target": dict(n_phase1=10, n_phase2=10, cases=5, cases_phase2=5),
+           "placebo": None, "reps": 10, "fits": {}}
+    md = report.render({"dataset": "amp", "split": {"column": "trial"}, "source": "a", "target": "b"}, res)
+    assert "`trial`;" in md and " at " not in md.split("Split:")[1].split("\n")[0]
