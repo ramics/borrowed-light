@@ -62,3 +62,14 @@ def test_e2_runs_end_to_end_and_writes_manifest(tmp_path):
 def test_refuses_data_inside_repo():
     with pytest.raises(SystemExit, match="AC7"):
         e2_within_study._refuse_in_repo(e2_within_study.REPO / "data" / "x.csv")
+
+
+def test_report_handles_a_categorical_split():
+    from experiments import report
+    res = {"penalties": pd.DataFrame(columns=["model", "metric", "baseline", "target", "penalty",
+                                              "lo", "hi", "covers_zero", "valid_reps"]),
+           "source": dict(n_phase1=10, n_phase2=10, cases=5, cases_phase2=5),
+           "target": dict(n_phase1=10, n_phase2=10, cases=5, cases_phase2=5),
+           "placebo": None, "reps": 10, "fits": {}}
+    md = report.render({"dataset": "amp", "split": {"column": "trial"}, "source": "a", "target": "b"}, res)
+    assert "`trial`;" in md and " at " not in md.split("Split:")[1].split("\n")[0]

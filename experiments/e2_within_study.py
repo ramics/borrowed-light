@@ -1,7 +1,7 @@
 """E2, within-study population transfer.
 
     python -m experiments.e2_within_study experiments/configs/e2_hvtn505_age.yaml \
-        --data /path/outside/repo/hvtn505.rda [--out reports/<run>] [--reps N]
+        --data /path/outside/repo/<file or directory> [--out reports/<run>] [--reps N]
 
 Fits each configured model on the source stratum, measures it at home and on
 the target stratum, and bootstraps every penalty. Writes to the output
@@ -54,7 +54,7 @@ def describe(df: pd.DataFrame) -> dict:
 
 def run(config: dict, data: Path, reps: int | None = None) -> dict:
     _refuse_in_repo(data)
-    frame, placebo_counts = LOADERS[config["dataset"]](data, config["split"])
+    frame, placebo_counts = LOADERS[config["dataset"]](data, config["split"], **config.get("loader_options", {}))
     src = frame[frame["stratum"] == config["source"]]
     tgt = frame[frame["stratum"] == config["target"]]
     placebo = _placebo(placebo_counts, config["source"], config["target"]) if config.get("placebo_offset") else None

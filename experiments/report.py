@@ -113,7 +113,8 @@ def render(config: dict, res: dict) -> str:
          "the source population to the target. It makes no claim that any vaccine works, and no "
          "claim about any pathogen.", "",
          "## Set-up", "",
-         f"- Split: `{split.get('column')}` at {split.get('cut')}; baseline measured by "
+         f"- Split: `{split.get('column')}`"
+         f"{' at ' + str(split['cut']) if 'cut' in split else ''}; baseline measured by "
          f"`{config.get('baseline', 'holdout')}`.",
          f"- Uncertainty: {res['reps']} participant-level bootstrap replicates, "
          f"{int(round(100 * (1 - config.get('alpha', 0.05))))}% percentile intervals.",
