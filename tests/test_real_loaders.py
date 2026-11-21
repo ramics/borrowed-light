@@ -1,5 +1,5 @@
-"""AMP loader on a synthetic stand-in shaped like the GDESJI release.
-No real participant data is used (AC7)."""
+"""Loaders for released real datasets (AMP, PNG P. vivax), tested on synthetic
+stand-ins shaped like each release. No real participant data is used (AC7)."""
 
 import numpy as np
 import pandas as pd
@@ -90,3 +90,34 @@ def test_amp_pk_two_phase_weights_reproduce_phase_one(tmp_path):
     # IPW weights restore the phase-one counts in every sampling stratum.
     assert np.isclose(p2["sampling_weight"].sum(), len(frame))
     assert {"marker_log10_conc_mean", "marker_log10_conc_p10"} <= set(frame.columns)
+
+
+def fake_png(path, n=200, seed=2):
+    """Synthetic file shaped like the PNG P. vivax release (DBP_data_fid)."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    villages = ["Ilaita 1", "Ilaita 4", "Sunuhu 1", "Kamakor"]
+    for i in range(n):
+        igg = {f"{a}_dil_igg_v1": 10 ** rng.normal(-3.5, 0.5) for a in loaders.PNG_PV_ANTIGENS}
+        v, age = villages[i % 4], rng.uniform(1, 4)
+        for wk in range(8):
+            rows.append({"fid": f"h{i}", "fuwk": wk, "pv_500": int(rng.random() < 0.15),
+                         "village": v, "age_yr": age, **igg})
+    pd.DataFrame(rows).to_csv(path, index=False)
+    return path
+
+
+def test_png_pv_loader_and_e2(tmp_path):
+    path = fake_png(tmp_path / "png.csv")
+    frame, placebo = loaders.png_pv(path, {"column": "village_group"})
+    assert set(frame["stratum"]) == {"Ilaita", "other"} and len(frame) == 200
+    assert len([c for c in frame.columns if c.startswith("marker_")]) == 6
+    assert placebo.empty and frame["time_to_event"].between(1, 7).all()
+    raw = pd.read_csv(path)
+    fu = raw[raw.fuwk >= 1]
+    assert frame["endpoint"].sum() == fu[fu.pv_500 > 0]["fid"].nunique()
+    cfg = {"dataset": "png_pv", "split": {"column": "village_group"}, "source": "Ilaita",
+           "target": "other", "models": ["ridge_logistic", "ridge_cox"], "baseline": "cv",
+           "folds": 3, "seed": 1, "placebo_offset": False, "bootstrap_reps": 3}
+    res = e2_within_study.run(cfg, path, reps=3)
+    assert {"auc", "c_index"} <= set(res["penalties"]["metric"])
