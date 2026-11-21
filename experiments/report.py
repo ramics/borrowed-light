@@ -60,8 +60,9 @@ def _warnings(res: dict) -> list[str]:
         if f.get("C_at_grid_floor"):
             out.append(f"`{model}`: cross-validation in the source chose the strongest penalty on "
                        "the grid, so the model is close to intercept-only. The source shows no "
-                       "marker signal it can separate from noise; its discrimination and slope "
-                       "rows describe noise.")
+                       "marker signal it can separate from noise; its discrimination, slope and "
+                       "decision rows describe noise. Decision flips are worst here: every "
+                       "prediction sits near the threshold, so tiny shifts flip nearly everyone.")
     failed = res["penalties"].query("valid_reps < @res['reps']")
     if len(failed):
         worst = int(res["reps"] - failed["valid_reps"].min())
