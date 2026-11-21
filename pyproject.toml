@@ -17,6 +17,8 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8"]
+# Reading .rda releases such as HVTN 505 from the CRAN `vaccine` package.
+rda = ["pyreadr>=0.5"]
 
 [tool.setuptools]
 packages = ["penalty", "sim"]

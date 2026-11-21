@@ -1,0 +1,13 @@
+# Same split as e2_hvtn505_age.yaml, other direction.
+experiment: e2_within_study
+dataset: hvtn505
+split: {column: age, cut: 30, labels: [age_18_29, age_30_50]}
+source: age_30_50
+target: age_18_29
+models: [ridge_logistic, single_marker, ridge_cox]
+baseline: cv
+folds: 5
+bootstrap_reps: 1000
+alpha: 0.05
+seed: 20261121
+placebo_offset: true
