@@ -56,3 +56,37 @@ def test_amp_e2_end_to_end_and_directory_digest(tmp_path):
     d1 = manifest.file_digest(root)
     (root / "survival.csv").write_text((root / "survival.csv").read_text() + "\n")
     assert manifest.file_digest(root) != d1
+
+
+def fake_pk(root, frame_root, seed=1):
+    """Synthetic PT80-release files for a fake_amp cohort: all cases plus 30
+    controls per trial, with uids colliding across trials as in the real one."""
+    rng = np.random.default_rng(seed)
+    surv = pd.read_csv(frame_root / "survival.csv")
+    vax = surv[surv.rx_code != "C3"]
+    cases = vax[vax.hiv1event == 1]
+    ctl = vax[vax.hiv1event == 0].groupby("protocol").head(30)
+    rows = []
+    for r in pd.concat([cases, ctl]).itertuples():
+        for t in range(1, 561):
+            rows.append((t, float(np.exp(rng.normal(3, 0.5))), r.uid))
+    root.mkdir(parents=True)
+    pd.DataFrame(rows, columns=["time", "Cc", "uid"]).to_csv(root / "dat_est_daily_caseCtl.tab", sep="\t", index=False)
+    study = cases["protocol"].str.replace(" ", "").str.replace("HVTN", "HVTN", regex=False)
+    pd.DataFrame({"uid": cases.uid, "TAFD_MEDIAN": cases.hiv1survday - 10,
+                  "study": study, "Cc": 1.0}).to_csv(root / "dat_case_EstInfTime_cc_nab.tab", sep="\t", index=False)
+    in703 = pd.concat([cases, ctl])
+    in703 = in703[in703.protocol == "HVTN 703/HPTN 081"]
+    pd.DataFrame({"ID": range(len(in703)), "uid": in703.uid}).to_csv(root / "id_uid_703.tab", sep="\t", index=False)
+    return len(cases), len(ctl)
+
+
+def test_amp_pk_two_phase_weights_reproduce_phase_one(tmp_path):
+    root, *_ = fake_amp(tmp_path / "core", n=900)
+    n_cases, n_ctl = fake_pk(tmp_path / "pt80", root)
+    frame, _ = loaders.amp(tmp_path, {"column": "trial"}, markers="pk")
+    p2 = frame[frame.phase2 == 1]
+    assert 0 < len(p2) <= n_cases + n_ctl
+    # IPW weights restore the phase-one counts in every sampling stratum.
+    assert np.isclose(p2["sampling_weight"].sum(), len(frame))
+    assert {"marker_log10_conc_mean", "marker_log10_conc_p10"} <= set(frame.columns)

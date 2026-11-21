@@ -54,7 +54,7 @@ def describe(df: pd.DataFrame) -> dict:
 
 def run(config: dict, data: Path, reps: int | None = None) -> dict:
     _refuse_in_repo(data)
-    frame, placebo_counts = LOADERS[config["dataset"]](data, config["split"])
+    frame, placebo_counts = LOADERS[config["dataset"]](data, config["split"], **config.get("loader_options", {}))
     src = frame[frame["stratum"] == config["source"]]
     tgt = frame[frame["stratum"] == config["target"]]
     placebo = _placebo(placebo_counts, config["source"], config["target"]) if config.get("placebo_offset") else None
