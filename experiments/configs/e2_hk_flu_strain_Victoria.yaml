@@ -1,0 +1,24 @@
+# E2 on the Hong Kong H3N2 serosurvey (Wei et al. 2018; CC0, Zenodo
+# doi:10.5281/zenodo.5004830): fit on the Victoria epidemics, transfer to the
+# Perth epidemics. Perth = epidemics 1-2 (2010, 2012; HAI vs A/Perth/16/2009),
+# Victoria = epidemics 3-4 (2013, 2014; HAI vs A/Victoria/361/2011).
+# Natural infection, not a vaccine trial. Data path at run time: a directory
+# holding titer.epi1.csv ... titer.epi4.csv.
+experiment: e2_within_study
+dataset: hk_flu
+loader_options: {cluster: household}
+split: {column: strain}
+source: Victoria
+target: Perth
+models: [ridge_logistic, single_marker]
+baseline: cv
+folds: 5
+bootstrap_reps: 1000
+alpha: 0.05
+seed: 20261122
+placebo_offset: false
+caveats:
+  - "Natural infection, not a vaccine trial: the marker is pre-epidemic HAI titre and the endpoint is a four-fold or greater HAI rise across the epidemic (the published definition). Self-reported vaccinees are excluded, as in the paper."
+  - "Marker and endpoint share one assay, so the endpoint is partly a function of the marker. A pre-titre measured high by chance makes a four-fold rise less likely (regression to the mean); a pre-titre at 1:640 or above cannot rise four-fold under the 1:1280 ceiling; infection boosts high titres less. All three make high titres look protective without any protection, so the home AUC and slope are optimistic. The penalty is a difference, so the shared part cancels; what does not cancel is any difference in these artefacts between strata, which here includes a change of test antigen (Perth to Victoria)."
+  - "The same people (and households) appear in both strata. Rows are clustered by household for CV folds and the bootstrap, and the bootstrap draws households once for both sides. Overlap makes the gap smaller than a transfer to new people, so read the penalty as a lower bound on the population-transfer penalty."
+  - "There is no unexposed arm, so the attack-rate difference between epidemics cannot be removed. Calibration-in-the-large moves with the attack rate and is not evidence about the correlate on its own."

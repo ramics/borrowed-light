@@ -16,6 +16,7 @@ that produces this frame where the data lives.
 | sampling_weight   | float | required, > 0, inverse phase-two sampling prob.   |
 | sampling_stratum  | str   | optional, two-phase sampling stratum               |
 | phase2            | int   | optional 0/1; rows with 0 carry no marker data     |
+| cluster_id        | str   | optional; rows sharing it are resampled together   |
 
 Two-phase (case-cohort / case-control) data can be supplied either as the
 phase-two rows only, with ``sampling_weight`` = 1 / P(selected | stratum), or
@@ -23,6 +24,12 @@ as the whole phase-one cohort with ``phase2`` marking who was measured. In the
 second form the phase-one-only rows are kept so the bootstrap can resample the
 cohort and keep each person's phase-two status (literature review, section 6),
 but they are dropped before any fit or metric.
+
+``cluster_id`` is for data where rows are not independent: one person
+observed in several seasons, or members of one household. Rows sharing a
+cluster always land on the same side of a holdout split or CV fold, and the
+bootstrap resamples whole clusters, jointly across source and target when
+the two share clusters (see :mod:`penalty.resample`).
 """
 
 from __future__ import annotations
@@ -36,8 +43,8 @@ import pandas as pd
 
 MARKER_PREFIX = "marker_"
 REQUIRED = ("participant_id", "study_id", "stratum", "platform", "endpoint", "sampling_weight")
-OPTIONAL = ("time_to_event", "sampling_stratum", "phase2")
-STRING_COLS = ("participant_id", "study_id", "stratum", "platform", "sampling_stratum")
+OPTIONAL = ("time_to_event", "sampling_stratum", "phase2", "cluster_id")
+STRING_COLS = ("participant_id", "study_id", "stratum", "platform", "sampling_stratum", "cluster_id")
 
 
 class SchemaError(ValueError):

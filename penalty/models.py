@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from scipy.special import expit
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
 from . import schema
 from .metrics import _weighted_logistic
@@ -78,6 +78,16 @@ def _fit_ridge(x, y, w, C, b0=None, iters=100, tol=1e-9):
     return float(b[0]), b[1:].copy()
 
 
+def _cv_splits(source: pd.DataFrame, z, y, k: int, seed: int):
+    """Inner CV folds for tuning. Clustered frames (``cluster_id``) use
+    stratified group folds so no cluster straddles a fold; others keep the
+    plain stratified folds."""
+    if "cluster_id" in source.columns:
+        g = schema.phase_two(source)["cluster_id"].str.split("#", n=1).str[0].to_numpy()
+        return StratifiedGroupKFold(n_splits=k, shuffle=True, random_state=seed).split(z, y, g)
+    return StratifiedKFold(n_splits=k, shuffle=True, random_state=seed).split(z, y)
+
+
 def fit_ridge_logistic(source: pd.DataFrame, markers=None, c_grid=DEFAULT_C_GRID,
                        folds: int = 5, seed: int = 0) -> FittedModel:
     """Weighted ridge logistic regression, C chosen by weighted CV log loss."""
@@ -90,7 +100,7 @@ def fit_ridge_logistic(source: pd.DataFrame, markers=None, c_grid=DEFAULT_C_GRID
     if len(c_grid) > 1 and k < 2:
         raise ValueError("need at least two cases and two non-cases to tune the penalty")
     losses = np.zeros(len(c_grid))
-    splits = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed).split(z, y) if len(c_grid) > 1 else ()
+    splits = _cv_splits(source, z, y, k, seed) if len(c_grid) > 1 else ()
     for tr, te in splits:
         mu, sd = _weighted_standardiser(x[tr], w[tr])
         ztr, zte = (x[tr] - mu) / sd, (x[te] - mu) / sd
@@ -117,9 +127,8 @@ def fit_best_single_marker(source: pd.DataFrame, markers=None, folds: int = 5,
     k = int(min(folds, np.bincount(y, minlength=2).min()))
     if k < 2:
         raise ValueError("need at least two cases and two non-cases to choose a marker")
-    cv = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)
     losses = np.zeros(len(markers))
-    for tr, te in cv.split(x, y):
+    for tr, te in _cv_splits(source, x, y, k, seed):
         for j in range(len(markers)):
             b = _weighted_logistic(x[tr, j:j + 1], y[tr], w[tr])
             losses[j] += _weighted_log_loss(y[te], expit(b[0] + b[1] * x[te, j]), w[te]) / k
