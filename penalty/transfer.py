@@ -80,16 +80,37 @@ class TransferResult:
 def _units(df: pd.DataFrame) -> tuple[np.ndarray, list[str]]:
     """Resampling units. A bootstrap draw can contain one person several
     times under suffixed ids (``id#k``); all copies must land on the same side
-    of any split, or the baseline is measured partly on training rows."""
+    of any split, or the baseline is measured partly on training rows.
+    With a ``cluster_id`` column the unit is the cluster instead (see
+    :func:`_cluster_groups`)."""
     base = df["participant_id"].str.split("#", n=1).str[0].to_numpy()
     keys = ["endpoint"] + (["sampling_stratum"] if "sampling_stratum" in df.columns else [])
     return base, keys
 
 
+def _cluster_groups(df: pd.DataFrame) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Clustered data: each row's cluster (bootstrap copies of one cluster
+    count as one), and the clusters grouped by whether they hold any case, so
+    splits stay balanced on cases while whole clusters move together."""
+    base = df["cluster_id"].str.split("#", n=1).str[0].to_numpy()
+    any_case = pd.Series(df["endpoint"].to_numpy()).groupby(base).max()
+    groups = [np.asarray(sorted(any_case.index[any_case == v])) for v in (1, 0)]
+    return base, [g for g in groups if len(g)]
+
+
 def split_source(source: pd.DataFrame, holdout_frac: float, rng) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Random participant-level split, stratified by endpoint and sampling
     stratum. Rows are split at phase one, so each half is itself a valid
-    two-phase sample and the original weights stay correct in both."""
+    two-phase sample and the original weights stay correct in both.
+    Clustered frames are split by cluster."""
+    if "cluster_id" in source.columns:
+        base, groups = _cluster_groups(source)
+        chosen = set()
+        for g in groups:
+            people = rng.permutation(g)
+            chosen |= set(people[: int(round(holdout_frac * len(people)))])
+        held = np.isin(base, list(chosen))
+        return source.loc[~held], source.loc[held]
     base, keys = _units(source)
     held = np.zeros(len(source), bool)
     for _, idx in source.groupby(keys, sort=False).indices.items():
@@ -101,7 +122,16 @@ def split_source(source: pd.DataFrame, holdout_frac: float, rng) -> tuple[pd.Dat
 
 def assign_folds(source: pd.DataFrame, k: int, rng) -> np.ndarray:
     """Stratified fold labels, dealt round-robin per person so every fold gets
-    its share of cases, with the position carried between strata."""
+    its share of cases, with the position carried between strata.
+    Clustered frames are dealt by cluster."""
+    if "cluster_id" in source.columns:
+        base, groups = _cluster_groups(source)
+        lab, pos = {}, 0
+        for g in groups:
+            for i, b in enumerate(rng.permutation(g)):
+                lab[b] = (i + pos) % k
+            pos += len(g)
+        return np.array([lab[b] for b in base], int)
     base, keys = _units(source)
     fold = np.zeros(len(source), int)
     pos = 0

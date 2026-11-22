@@ -116,9 +116,15 @@ def render(config: dict, res: dict) -> str:
          f"- Split: `{split.get('column')}`"
          f"{' at ' + str(split['cut']) if 'cut' in split else ''}; baseline measured by "
          f"`{config.get('baseline', 'holdout')}`.",
-         f"- Uncertainty: {res['reps']} participant-level bootstrap replicates, "
+         f"- Uncertainty: {res['reps']} {res.get('resample_unit', 'participant')}-level bootstrap replicates, "
          f"{int(round(100 * (1 - config.get('alpha', 0.05))))}% percentile intervals.",
-         "", "| | source | target |", "| --- | --- | --- |"]
+         ]
+    if res.get("shared_clusters") is not None:
+        L.append(f"- Clusters (`cluster_id`): {res['source']['clusters']} in the source, "
+                 f"{res['target']['clusters']} in the target, {res['shared_clusters']} in both. "
+                 "Whole clusters are resampled, once for both sides, and kept on one side of "
+                 "every CV fold.")
+    L += ["", "| | source | target |", "| --- | --- | --- |"]
     for k, label in (("n_phase1", "participants (phase one)"), ("n_phase2", "with markers (phase two)"),
                      ("cases", "events"), ("cases_phase2", "events with markers")):
         L.append(f"| {label} | {res['source'][k]} | {res['target'][k]} |")
@@ -145,10 +151,10 @@ def render(config: dict, res: dict) -> str:
     L += ["", "## Caveats", "",
           "- What transfers from this work is the estimator, not these numbers. A penalty measured "
           "on one pair of populations says little about another pair.",
-          "- Intervals are participant-level bootstrap percentiles, which are known to be "
-          "unreliable at small n.",
+          f"- Intervals are {res.get('resample_unit', 'participant')}-level bootstrap percentiles, "
+          "which are known to be unreliable at small n.",
           "- Penalty strength and every threshold were fixed in the source before the target was "
-          "evaluated.", "",
+          "evaluated."] + [f"- {c}" for c in config.get("caveats", [])] + ["",
           "## Reproduce", "",
           "Everything needed is in `manifest.json` next to this file: config, commit, seed, "
           "package versions and the data's SHA-256.", ""]

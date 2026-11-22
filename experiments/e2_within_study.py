@@ -49,6 +49,7 @@ def describe(df: pd.DataFrame) -> dict:
     p2 = schema.phase_two(df)
     return {"n_phase1": int(len(df)), "n_phase2": int(len(p2)),
             "cases": int(df["endpoint"].sum()), "cases_phase2": int(p2["endpoint"].sum()),
+            **({"clusters": int(df["cluster_id"].nunique())} if "cluster_id" in df.columns else {}),
             "weighted_n": float(p2["sampling_weight"].sum())}
 
 
@@ -94,7 +95,16 @@ def run(config: dict, data: Path, reps: int | None = None) -> dict:
         "source": describe(src), "target": describe(tgt),
         "placebo": None if placebo is None else placebo.__dict__ | {"offset_logit": placebo.offset("logit")},
         "reps": reps, "seconds": timing, "fits": fits,
+        "resample_unit": _resample_unit(src, tgt),
+        "shared_clusters": (int(len(set(src["cluster_id"]) & set(tgt["cluster_id"])))
+                            if "cluster_id" in src.columns else None),
     }
+
+
+def _resample_unit(src: pd.DataFrame, tgt: pd.DataFrame) -> str:
+    if "cluster_id" not in src.columns:
+        return "participant"
+    return "cluster"
 
 
 def main(argv=None):

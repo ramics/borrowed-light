@@ -14,6 +14,14 @@ source fit, so replicates cost one fit each. ``retune=True`` reruns the
 source-only cross-validation in every replicate, which also propagates tuning
 uncertainty and costs about 50 times as much.
 
+Clustered data (a ``cluster_id`` column, e.g. one person in several
+seasons, or a household) are resampled by whole cluster. When source and
+target share clusters, as when the same people are followed through the
+source and the target epidemics, one draw of clusters is taken from the
+union and each frame keeps its own rows of the drawn clusters. Resampling
+the two sides independently would ignore the positive correlation between
+baseline and target metrics and give penalty intervals that are too wide.
+
 ``leave_one_study_out`` applies when three or more studies exist.
 """
 
@@ -68,6 +76,29 @@ def _resample(df: pd.DataFrame, rng) -> pd.DataFrame:
     return out
 
 
+def _resample_clusters(frames: list[pd.DataFrame], rng) -> list[pd.DataFrame]:
+    """One cluster bootstrap draw applied jointly to several frames. Like the
+    phase-one bootstrap, the draw is unstratified, so the number of cases
+    varies as it would in a repeat of the study."""
+    rows = [f.groupby("cluster_id", sort=True).indices for f in frames]
+    clusters = np.asarray(sorted(set().union(*rows)), dtype=object)
+    pick = rng.choice(clusters, size=len(clusters), replace=True)
+    out = []
+    for f, r in zip(frames, rows):
+        parts, copy = [], []
+        for k, c in enumerate(pick):
+            if c in r:
+                parts.append(r[c])
+                copy.append(np.full(len(r[c]), k))
+        idx = np.concatenate(parts) if parts else np.array([], int)
+        k = np.concatenate(copy).astype(str) if copy else np.array([], str)
+        d = f.iloc[idx].copy()
+        d["participant_id"] = d["participant_id"] + "#" + k
+        d["cluster_id"] = d["cluster_id"] + "#" + k
+        out.append(d)
+    return out
+
+
 def bootstrap(source: pd.DataFrame, target: pd.DataFrame, reps: int = 1000, alpha: float = 0.05,
               seed: int = 0, retune: bool = False, **kw) -> dict[str, Interval]:
     """Percentile intervals for every penalty metric, plus the exposure-adjusted
@@ -78,11 +109,16 @@ def bootstrap(source: pd.DataFrame, target: pd.DataFrame, reps: int = 1000, alph
     source, target = schema.validate(source), schema.validate(target)
     placebo = kw.pop("placebo", None)
     rng = np.random.default_rng(seed)
+    clustered = "cluster_id" in source.columns and "cluster_id" in target.columns
     rows = []
     for r in range(reps):
         pl = placebo.resample(rng) if placebo is not None else None
+        if clustered:
+            s_r, t_r = _resample_clusters([source, target], rng)
+        else:
+            s_r, t_r = _resample(source, rng), _resample(target, rng)
         try:
-            res = transfer.run(_resample(source, rng), _resample(target, rng), seed=seed + 1 + r,
+            res = transfer.run(s_r, t_r, seed=seed + 1 + r,
                                placebo=pl, **kw)
         except ValueError:
             # Too few cases in this draw to fit or to tune; it counts as a
