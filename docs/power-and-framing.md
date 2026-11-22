@@ -33,6 +33,11 @@ Dataverse guestbook.
   is only moderate per SD, so pooling many studies, most cheaply from published
   summary data, is the realistic route to power.
 
+Update, same day: rank 3 has been run. See `docs/summary-level-pooling.md`.
+Across four COVID platforms, the neutralising-titre slope shows no detectable
+between-trial heterogeneity (τ 95% upper bound 0.49 log-HR per 10-fold). The
+binding-IgG slope may vary more (τ 0.26, not significant).
+
 ## 2. Ranked recommendations
 
 | Rank | Do | Cost | What it buys |
