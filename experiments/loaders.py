@@ -289,4 +289,76 @@ def png_pv(path: str | Path, split: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     return schema.validate(df), pd.DataFrame(columns=["stratum", "events", "n"])
 
 
-LOADERS = {"hvtn505": hvtn505, "amp": amp, "png_pv": png_pv}
+
+HK_STRAIN = {1: "Perth", 2: "Perth", 3: "Victoria", 4: "Victoria"}
+HK_TITRE_FLOOR = 5  # the release codes "undetectable" (< 1:10) as 5
+
+
+def hk_flu(path: str | Path, split: dict, cluster: str = "household",
+           include_vaccinated: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Hong Kong longitudinal H3N2 serosurvey, 2009-2015 (Wei et al. 2018,
+    PLoS One 13:e0197504; data CC0, Zenodo doi:10.5281/zenodo.5004830).
+
+    ``path`` is a directory holding ``titer.epi1.csv`` ... ``titer.epi4.csv``.
+    Each row is one person's paired sera around one epidemic: HAI titre
+    before and after, against A/Perth/16/2009 for epidemics 1-2 (2010, 2012)
+    and A/Victoria/361/2011 for epidemics 3-4 (2013, 2014).
+
+    This is natural infection, not a vaccine trial. The "marker" is the
+    pre-epidemic HAI titre and the endpoint is the published infection
+    definition, a four-fold or greater rise from pre to post serum. Both come
+    from the same assay, so the endpoint is partly a function of the marker
+    (regression to the mean, the 1:1280 ceiling, weaker boosting from high
+    titres); see the config caveats. Following the paper, self-reported
+    vaccinees are excluded (missing status counts as unvaccinated), because
+    a vaccine dose between the two sera produces a rise without infection.
+
+    Markers: ``marker_log2_hai_pre`` = log2(titre / 5), 0 at undetectable;
+    ``marker_hai_pre_ge40`` = titre >= 1:40, the conventional threshold.
+
+    One row per person per epidemic. ``participant_id`` = subject@epiK. The
+    subject id is ``<household>-<member>``; ``cluster`` picks the resampling
+    unit: ``household`` (default; members share exposure and one person's
+    rows in several epidemics stay together), ``person``, or ``none``.
+
+    ``split`` = {"column": "strain"} (Perth vs Victoria), {"column": "epidemic"}
+    (labels epi1..epi4), or {"column": "age", "cut": ...}.
+    """
+    root = Path(path)
+    parts = []
+    for k in (1, 2, 3, 4):
+        d = pd.read_csv(_find(root, f"titer.epi{k}.csv"))
+        parts.append(d.assign(epidemic=f"epi{k}", strain=HK_STRAIN[k]))
+    d = pd.concat(parts, ignore_index=True)
+    d["vac"] = d["vac"].fillna(0)
+    if not include_vaccinated:
+        d = d[d["vac"] == 0]
+    d = d.dropna(subset=["h3.ph1", "h3.ph2"])
+    pre, post = d["h3.ph1"].astype(float), d["h3.ph2"].astype(float)
+    if (pre < HK_TITRE_FLOOR).any():
+        raise ValueError("pre-epidemic titres below the release's floor of 5")
+    col = split["column"]
+    d["stratum"] = stratify(d[col], split) if "cut" in split else d[col].astype(str)
+    sid = d["subjectID"].astype(str)
+    cl = {"household": sid.str.split("-", n=1).str[0], "person": sid,
+          "none": sid + "@" + d["epidemic"]}
+    if cluster not in cl:
+        raise ValueError(f"cluster must be one of {sorted(cl)}, not {cluster!r}")
+    df = pd.DataFrame({
+        "participant_id": sid + "@" + d["epidemic"],
+        "study_id": "HK-H3N2-serosurvey",
+        "stratum": d["stratum"],
+        "platform": "natural infection",
+        "marker_log2_hai_pre": np.log2(pre / HK_TITRE_FLOOR),
+        "marker_hai_pre_ge40": (pre >= 40).astype(float),
+        "endpoint": (post / pre >= 4).astype(int),
+        "sampling_weight": 1.0,
+        "phase2": 1,
+        "cluster_id": cl[cluster],
+    }).reset_index(drop=True)
+    # No placebo arm: exposure cannot be separated from the marker here.
+    placebo = pd.DataFrame(columns=["stratum", "events", "n"])
+    return schema.validate(df), placebo
+
+
+LOADERS = {"hvtn505": hvtn505, "amp": amp, "hk_flu": hk_flu, "png_pv": png_pv}

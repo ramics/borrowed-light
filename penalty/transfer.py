@@ -80,16 +80,37 @@ class TransferResult:
 def _units(df: pd.DataFrame) -> tuple[np.ndarray, list[str]]:
     """Resampling units. A bootstrap draw can contain one person several
     times under suffixed ids (``id#k``); all copies must land on the same side
-    of any split, or the baseline is measured partly on training rows."""
+    of any split, or the baseline is measured partly on training rows.
+    With a ``cluster_id`` column the unit is the cluster instead (see
+    :func:`_cluster_groups`)."""
     base = df["participant_id"].str.split("#", n=1).str[0].to_numpy()
     keys = ["endpoint"] + (["sampling_stratum"] if "sampling_stratum" in df.columns else [])
     return base, keys
 
 
+def _cluster_groups(df: pd.DataFrame) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Clustered data: each row's cluster (bootstrap copies of one cluster
+    count as one), and the clusters grouped by whether they hold any case, so
+    splits stay balanced on cases while whole clusters move together."""
+    base = df["cluster_id"].str.split("#", n=1).str[0].to_numpy()
+    any_case = pd.Series(df["endpoint"].to_numpy()).groupby(base).max()
+    groups = [np.asarray(sorted(any_case.index[any_case == v])) for v in (1, 0)]
+    return base, [g for g in groups if len(g)]
+
+
 def split_source(source: pd.DataFrame, holdout_frac: float, rng) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Random participant-level split, stratified by endpoint and sampling
     stratum. Rows are split at phase one, so each half is itself a valid
-    two-phase sample and the original weights stay correct in both."""
+    two-phase sample and the original weights stay correct in both.
+    Clustered frames are split by cluster."""
+    if "cluster_id" in source.columns:
+        base, groups = _cluster_groups(source)
+        chosen = set()
+        for g in groups:
+            people = rng.permutation(g)
+            chosen |= set(people[: int(round(holdout_frac * len(people)))])
+        held = np.isin(base, list(chosen))
+        return source.loc[~held], source.loc[held]
     base, keys = _units(source)
     held = np.zeros(len(source), bool)
     for _, idx in source.groupby(keys, sort=False).indices.items():
@@ -101,7 +122,16 @@ def split_source(source: pd.DataFrame, holdout_frac: float, rng) -> tuple[pd.Dat
 
 def assign_folds(source: pd.DataFrame, k: int, rng) -> np.ndarray:
     """Stratified fold labels, dealt round-robin per person so every fold gets
-    its share of cases, with the position carried between strata."""
+    its share of cases, with the position carried between strata.
+    Clustered frames are dealt by cluster."""
+    if "cluster_id" in source.columns:
+        base, groups = _cluster_groups(source)
+        lab, pos = {}, 0
+        for g in groups:
+            for i, b in enumerate(rng.permutation(g)):
+                lab[b] = (i + pos) % k
+            pos += len(g)
+        return np.array([lab[b] for b in base], int)
     base, keys = _units(source)
     fold = np.zeros(len(source), int)
     pos = 0
@@ -132,21 +162,42 @@ def _predict(model: FittedModel, df: pd.DataFrame, offset: float = 0.0,
     return out
 
 
-def _score(pred: pd.DataFrame, cox: bool, horizon: float | None) -> dict:
+def _score(pred: pd.DataFrame, cox: bool, horizon: float | None, decision: dict | None = None) -> dict:
     if cox:
         return survival.evaluate_survival(pred.t, pred.y, pred.lp, pred.risk, pred.w, horizon, pred.cumhaz)
-    return metrics.evaluate(pred.y.to_numpy(), pred.risk.to_numpy(), pred.w.to_numpy())
+    y, p, w = pred.y.to_numpy(), pred.risk.to_numpy(), pred.w.to_numpy()
+    out = metrics.evaluate(y, p, w)
+    if decision is not None:
+        out |= metrics.decision_flip(y, p, w, **decision)
+    return out
 
 
 def _evaluate(model: FittedModel, df: pd.DataFrame, offset: float = 0.0,
-              horizon: float | None = None) -> dict:
-    return _score(_predict(model, df, offset, horizon), model.kind == "ridge_cox", horizon)
+              horizon: float | None = None, decision: dict | None = None) -> dict:
+    return _score(_predict(model, df, offset, horizon), model.kind == "ridge_cox", horizon, decision)
+
+
+def decision_rule(model: FittedModel, source: pd.DataFrame, risk_threshold: float | None = None) -> dict | None:
+    """Thresholds for the decision-flip metrics, fixed from the source alone.
+
+    ``risk_threshold`` defaults to the source's weighted endpoint rate (call a
+    person high-risk when the model puts them above the average). The
+    optimal cut is the weighted Youden cut on the source predictions.
+    Decision metrics are binary-endpoint only for now; Cox returns None.
+    """
+    if model.kind == "ridge_cox":
+        return None
+    d = schema.phase_two(source)
+    y, w = d["endpoint"].to_numpy(), d["sampling_weight"].to_numpy()
+    r = float(np.average(y, weights=w)) if risk_threshold is None else float(risk_threshold)
+    return {"risk_threshold": r, "source_cut": metrics.youden_cut(y, model.predict(source), w)}
 
 
 def run(source: pd.DataFrame, target: pd.DataFrame, model: str = "ridge_logistic",
         holdout_frac: float = 0.3, seed: int = 0, marker_map: schema.MarkerMap | None = None,
         markers=None, placebo: PlaceboArms | None = None, model_kw: dict | None = None,
-        horizon: float | None = None, baseline: str = "holdout", folds: int = 5) -> TransferResult:
+        horizon: float | None = None, baseline: str = "holdout", folds: int = 5,
+        risk_threshold: float | None = None) -> TransferResult:
     """Run the operation.
 
     ``baseline="holdout"`` (the spec's form) fits on a random ``1 - holdout_frac``
@@ -165,19 +216,19 @@ def run(source: pd.DataFrame, target: pd.DataFrame, model: str = "ridge_logistic
         target = schema.validate(marker_map.apply(target))
     if baseline == "cv":
         return run_cv(source, target, model=model, seed=seed, markers=markers, placebo=placebo,
-                      model_kw=model_kw, horizon=horizon, folds=folds)
+                      model_kw=model_kw, horizon=horizon, folds=folds, risk_threshold=risk_threshold)
     if baseline != "holdout":
         raise ValueError(f"baseline must be 'holdout' or 'cv', not {baseline!r}")
     rng = np.random.default_rng(seed)
     train, held = split_source(source, holdout_frac, rng)
     return run_split(train, held, target, model=model, seed=seed, markers=markers,
-                     placebo=placebo, model_kw=model_kw, horizon=horizon)
+                     placebo=placebo, model_kw=model_kw, horizon=horizon, risk_threshold=risk_threshold)
 
 
 def run_split(train: pd.DataFrame, held: pd.DataFrame, target: pd.DataFrame,
               model: str = "ridge_logistic", seed: int = 0, markers=None,
               placebo: PlaceboArms | None = None, model_kw: dict | None = None,
-              horizon: float | None = None) -> TransferResult:
+              horizon: float | None = None, risk_threshold: float | None = None) -> TransferResult:
     """The operation on an already-split source. Frames must be validated and
     on a common marker scale; :func:`run` does both.
 
@@ -189,13 +240,15 @@ def run_split(train: pd.DataFrame, held: pd.DataFrame, target: pd.DataFrame,
     if cox and horizon is None:
         horizon = float(np.median(schema.phase_two(train)["time_to_event"]))
     pen = survival.penalty_survival if cox else metrics.penalty
-    b = _evaluate(m, held, horizon=horizon)
-    t = _evaluate(m, target, horizon=horizon)
+    rule = decision_rule(m, train, risk_threshold)
+    b = _evaluate(m, held, horizon=horizon, decision=rule)
+    t = _evaluate(m, target, horizon=horizon, decision=rule)
     n = {name: int(len(schema.phase_two(d))) for name, d in
          (("train", train), ("heldout", held), ("target", target))}
     ta = pa = None
     if placebo is not None:
-        ta = _evaluate(m, target, offset=placebo.offset("cloglog" if cox else "logit"), horizon=horizon)
+        ta = _evaluate(m, target, offset=placebo.offset("cloglog" if cox else "logit"), horizon=horizon,
+                       decision=rule)
         pa = pen(b, ta)
     return TransferResult(model=m, baseline=b, target=t, penalty=pen(b, t), n=n,
                           target_adjusted=ta, penalty_adjusted=pa)
@@ -203,7 +256,8 @@ def run_split(train: pd.DataFrame, held: pd.DataFrame, target: pd.DataFrame,
 
 def run_cv(source: pd.DataFrame, target: pd.DataFrame, model: str = "ridge_logistic", seed: int = 0,
            markers=None, placebo: PlaceboArms | None = None, model_kw: dict | None = None,
-           horizon: float | None = None, folds: int = 5) -> TransferResult:
+           horizon: float | None = None, folds: int = 5,
+           risk_threshold: float | None = None) -> TransferResult:
     """Cross-validated baseline; see :func:`run`. Frames must be validated."""
     fit = lambda df, s: MODELS[model](df, markers=markers, seed=s, **(model_kw or {}))  # noqa: E731
     m = fit(source, seed)
@@ -220,7 +274,10 @@ def run_cv(source: pd.DataFrame, target: pd.DataFrame, model: str = "ridge_logis
     for f in range(k):
         mf = fit(source.loc[fold != f], seed + 1 + f)
         oof.append(_predict(mf, source.loc[fold == f], horizon=horizon))
-    b = _score(pd.concat(oof, ignore_index=True), cox, horizon)
+    # The decision rule comes from the full-source model, in sample; applying
+    # it to out-of-fold predictions is slightly optimistic for the baseline.
+    rule = decision_rule(m, source, risk_threshold)
+    b = _score(pd.concat(oof, ignore_index=True), cox, horizon, rule)
     # Ranking metrics are not pooled across folds. Each fold model has its own
     # intercept, and a fold with fewer cases in training gets a lower one, so
     # pooled out-of-fold scores rank people by fold and bias AUC below 0.5
@@ -236,12 +293,13 @@ def run_cv(source: pd.DataFrame, target: pd.DataFrame, model: str = "ridge_logis
         pair_w.append(pr.w[pr.y == 1].sum() * pr.w[pr.y == 0].sum())
     ok = ~np.isnan(per_fold)
     b[rank] = float(np.average(np.asarray(per_fold)[ok], weights=np.asarray(pair_w)[ok]))
-    t = _evaluate(m, target, horizon=horizon)
+    t = _evaluate(m, target, horizon=horizon, decision=rule)
     n = {"train": int(len(ph2)), "heldout": int(len(ph2)), "target": int(len(schema.phase_two(target))),
          "folds": k}
     ta = pa = None
     if placebo is not None:
-        ta = _evaluate(m, target, offset=placebo.offset("cloglog" if cox else "logit"), horizon=horizon)
+        ta = _evaluate(m, target, offset=placebo.offset("cloglog" if cox else "logit"), horizon=horizon,
+                       decision=rule)
         pa = pen(b, ta)
     return TransferResult(model=m, baseline=b, target=t, penalty=pen(b, t), n=n,
                           target_adjusted=ta, penalty_adjusted=pa)

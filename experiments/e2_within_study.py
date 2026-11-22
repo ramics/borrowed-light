@@ -6,7 +6,7 @@
 Fits each configured model on the source stratum, measures it at home and on
 the target stratum, and bootstraps every penalty. Writes to the output
 directory: ``manifest.json``, ``penalties.csv`` (one row per model x metric,
-point estimate and interval), ``bootstrap_draws.csv`` and ``summary.md``.
+point estimate and interval), ``bootstrap_draws.csv`` and ``report.md`` (see :mod:`experiments.report`).
 Only aggregate numbers are written; no participant-level rows leave the
 data's location.
 """
@@ -25,7 +25,7 @@ import yaml
 
 from penalty import resample, schema, transfer
 
-from . import manifest
+from . import manifest, report
 from .loaders import LOADERS
 
 REPO = Path(__file__).resolve().parents[1]
@@ -49,6 +49,7 @@ def describe(df: pd.DataFrame) -> dict:
     p2 = schema.phase_two(df)
     return {"n_phase1": int(len(df)), "n_phase2": int(len(p2)),
             "cases": int(df["endpoint"].sum()), "cases_phase2": int(p2["endpoint"].sum()),
+            **({"clusters": int(df["cluster_id"].nunique())} if "cluster_id" in df.columns else {}),
             "weighted_n": float(p2["sampling_weight"].sum())}
 
 
@@ -63,7 +64,7 @@ def run(config: dict, data: Path, reps: int | None = None) -> dict:
     for model in config["models"]:
         t0 = time.time()
         kw = dict(model=model, baseline=config.get("baseline", "holdout"), folds=config.get("folds", 5),
-                  placebo=placebo)
+                  placebo=placebo, risk_threshold=config.get("risk_threshold"))
         point = transfer.run(src, tgt, seed=config["seed"], **kw)
         ivs = resample.bootstrap(src, tgt, reps=reps, alpha=config.get("alpha", 0.05),
                                  seed=config["seed"], **kw)
@@ -94,44 +95,16 @@ def run(config: dict, data: Path, reps: int | None = None) -> dict:
         "source": describe(src), "target": describe(tgt),
         "placebo": None if placebo is None else placebo.__dict__ | {"offset_logit": placebo.offset("logit")},
         "reps": reps, "seconds": timing, "fits": fits,
+        "resample_unit": _resample_unit(src, tgt),
+        "shared_clusters": (int(len(set(src["cluster_id"]) & set(tgt["cluster_id"])))
+                            if "cluster_id" in src.columns else None),
     }
 
 
-def summary_md(config: dict, res: dict) -> str:
-    pen = res["penalties"]
-    lines = [f"# E2: {config['dataset']} — {config['source']} → {config['target']}", "",
-             f"Split on `{config['split']['column']}`"
-             f"{' at ' + str(config['split']['cut']) if 'cut' in config['split'] else ''}. "
-             f"Baseline: {config.get('baseline', 'holdout')}. "
-             f"{res['reps']} participant-level bootstrap replicates; "
-             f"{int(100 * (1 - config.get('alpha', 0.05)))}% percentile intervals.", "",
-             "| | source | target |", "| --- | --- | --- |"]
-    for k in ("n_phase1", "n_phase2", "cases", "cases_phase2"):
-        lines.append(f"| {k} | {res['source'][k]} | {res['target'][k]} |")
-    if res["placebo"]:
-        p = res["placebo"]
-        lines += ["", f"Placebo arms: {p['source_events']}/{p['source_n']} (source), "
-                  f"{p['target_events']}/{p['target_n']} (target); exposure offset "
-                  f"{p['offset_logit']:+.2f} on the logit scale."]
-    lines += ["", "| model | fitted on | penalty strength | note |", "| --- | --- | --- | --- |"]
-    for model, f in res["fits"].items():
-        note = ""
-        if f["C_at_grid_floor"]:
-            note = ("CV chose the strongest penalty on the grid: the model is close to intercept-only, "
-                    "so the source shows no marker signal it can separate from noise, and "
-                    "calibration slopes are not interpretable")
-        if f["chosen_marker"]:
-            note = f"best single marker: {f['chosen_marker']}"
-        lines.append(f"| {model} | {', '.join(f['markers'])} | "
-                     f"{'' if f['C'] is None else f'C = {f[chr(67)]:.3g}'} | {note} |")
-    lines += ["", "| model | metric | baseline | target | penalty | interval | valid reps |",
-              "| --- | --- | --- | --- | --- | --- | --- |"]
-    for r in pen.itertuples():
-        lines.append(f"| {r.model} | {r.metric} | {r.baseline:.3f} | {r.target:.3f} | "
-                     f"{r.penalty:+.3f} | [{r.lo:+.3f}, {r.hi:+.3f}] | {r.valid_reps} |")
-    lines += ["", "Penalty signs: AUC/C and Brier positive = worse in target; calibration "
-              "rows are the signed shift target − baseline.", ""]
-    return "\n".join(lines)
+def _resample_unit(src: pd.DataFrame, tgt: pd.DataFrame) -> str:
+    if "cluster_id" not in src.columns:
+        return "participant"
+    return "cluster"
 
 
 def main(argv=None):
@@ -153,8 +126,8 @@ def main(argv=None):
                         "source": res["source"], "target": res["target"], "placebo": res["placebo"]}, out)
     res["penalties"].to_csv(out / "penalties.csv", index=False)
     res["draws"].to_csv(out / "bootstrap_draws.csv", index=False)
-    (out / "summary.md").write_text(summary_md(config, res))
-    print((out / "summary.md").read_text())
+    (out / "report.md").write_text(report.render(config, res))
+    print((out / "report.md").read_text())
     print(f"wrote {out}")
 
 
