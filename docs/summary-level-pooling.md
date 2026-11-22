@@ -1,7 +1,7 @@
 # Between-study transfer from published correlate estimates
 
 Run 2026-11-22, following rank 3 of `docs/power-and-framing.md`. Code:
-`spikes/summary_pool.py`. Input: `spikes/data/summary_estimates.csv` (published
+`spikes/summary_pool.py`. Input: `spikes/published/summary_estimates.csv` (published
 summary numbers only, with a source for every row). Outputs:
 `/mnt/project-files/summary-pool/` (`pooled.json`, `loo_transfer.csv`).
 

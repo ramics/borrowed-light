@@ -22,7 +22,7 @@ For each family:
      only by their own sampling error, and recompute tau and the LOO
      attenuations. The observed values are compared with that null.
 
-Usage: python spikes/summary_pool.py data/summary_estimates.csv --out DIR
+Usage: python spikes/summary_pool.py spikes/published/summary_estimates.csv --out DIR
 """
 from __future__ import annotations
 
