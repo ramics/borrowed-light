@@ -73,15 +73,13 @@ to 4 months, randomly assigned **[v]**, and titres were measured in all cases.
 That is a case-cohort design. Sampling weights are not in the paper, so we ask
 for the subset flag and the phase-one counts needed to rebuild them.
 
-### If Sanofi declines: RTS,S phase 3 is listed
+### RTS,S phase 3 is requested in parallel
 
-GSK's RTS,S/AS01 phase 3 trial (MALARIA-055, NCT00866619, 15,459 enrolled) and
-its extension **are** listed on Vivli **[v]**, so they can be requested
-directly. Anti-CS antibody titres tracked protection (White et al. 2015
-*Lancet Infect Dis*), and the trial has two age cohorts and 11 sites. How many
-clinical malaria cases have anti-CS titres is not yet checked; titres were
-measured in an immunogenicity subset. Sanofi's high-dose influenza efficacy
-trial (FIM12, NCT01427309) is not listed **[v]**.
+GSK's RTS,S/AS01 phase 3 trial (MALARIA-055, NCT00866619) and its extension
+**are** listed on Vivli **[v]**, so they go on a direct data request at the
+same time as this enquiry. That draft, with the anti-CS case-count check, is
+in [vivli-proposal-rtss.md](vivli-proposal-rtss.md). Sanofi's high-dose
+influenza efficacy trial (FIM12, NCT01427309) is not listed **[v]**.
 
 ## 1. Title and lay summary
 
