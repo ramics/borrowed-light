@@ -120,10 +120,14 @@ another HIV E1 is wanted.
 ### C. Vivli — for AZD1222, CYD14/CYD15 dengue, RTS,S malaria
 
 AstraZeneca, Sanofi and GSK share through Vivli (GSK moved there from
-ClinicalStudyDataRequest.com in 2023 **[v]**). Search did not confirm listings
-for D8110C00001, CYD14 (NCT01373281), CYD15 (NCT01374516) or RTS,S phase 3
-(NCT00866619); use Vivli's Quick Study Look-up, or file an enquiry for unlisted
-trials.
+ClinicalStudyDataRequest.com in 2023 **[v]**). A search of the Vivli catalogue
+on 2026-11-22 found **no listing for CYD14 (NCT01373281) or CYD15
+(NCT01374516)**, so they need Vivli's enquiry form for unlisted studies, while
+**RTS,S phase 3 (NCT00866619) is listed** **[v]**. D8110C00001 not yet checked.
+The draft CYD proposal and enquiry text are in
+[vivli-proposal-cyd.md](vivli-proposal-cyd.md), and the RTS,S request in
+[vivli-proposal-rtss.md](vivli-proposal-rtss.md); CYD has 115 (CYD14) and 183
+(CYD15) vaccinee cases with month-13 PRNT50 (Moodie et al. 2018) **[v]**.
 
 Steps (Vivli request guide and FAQ):
 
