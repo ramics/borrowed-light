@@ -2,9 +2,9 @@
 
 **How much does a correlate of protection lose when you borrow it across a gap?**
 
-A countermeasure against a fast-moving or engineered pathogen cannot be efficacy-tested: there is no time, no stable case pool, and no ethical placebo arm during a lethal outbreak. The fallback is to argue from immune markers — *this response looks like the one that protected people in a trial of something similar*. That argument is routine in principle and unquantified in practice. Nobody can say how much weaker it gets across a different platform, a different population, or a cohort of thirty instead of thirty thousand.
+A countermeasure against a fast-moving or engineered pathogen cannot be efficacy-tested: there is no time, no stable case pool, and no ethical placebo arm during a lethal outbreak. The alternative is to argue from immune markers: *this response looks like the one that protected people in a trial of something similar*. That argument is routine in principle and unquantified in practice. Nobody can say how much weaker it gets across a different platform, a different population, or a cohort of thirty instead of thirty thousand.
 
-borrowed-light puts an interval on it. The unit of analysis is a *study* rather than a blood sample, so the measurements have already been made by other people and no wet lab is required.
+borrowed-light puts an interval on it. The unit of analysis is a *study*, not a blood sample, so the measurements have already been made by other people and no wet lab is required.
 
 ## The one operation
 
@@ -17,9 +17,9 @@ transfer   t = evaluate(m, T)             # what it is worth across the gap
 penalty    = b - t                        # per metric, with uncertainty
 ```
 
-Penalty strength is cross-validated **within the source only**; the target is never touched to tune anything, and that is enforced by the code rather than left to discipline. Everything else in the repo is plumbing around those four lines.
+Penalty strength is cross-validated **within the source only**. Touching the target to tune anything invalidates the whole measurement, so the code makes it structurally impossible instead of leaving it to discipline. Everything else in the repo is plumbing around those four lines.
 
-## Calibration is the headline, and that is the point
+## Calibration is the headline, not discrimination
 
 Four metrics ship with every run: AUC (or Harrell's C), calibration slope, calibration intercept, Brier. They fail in different ways and a regulator needs to see which. Under a pure population shift, discrimination barely moves while calibration tracks the shift one-for-one:
 
@@ -30,11 +30,11 @@ Four metrics ship with every run: AUC (or Harrell's C), calibration slope, calib
 | 1.0 | −0.002 | +1.00 |
 | 1.5 | −0.001 | +1.50 |
 
-A model that ranks people perfectly and sits on the wrong scale puts the decision threshold in the wrong place. Since admissibility *is* a threshold decision, a report that leads with AUC hides exactly the failure that matters. A fifth, decision-level metric counts it directly: the fraction of candidates whose accept/reject answer changes across the gap, at a fixed threshold and at a source-optimal one, reported side by side.
+A model that ranks people perfectly and sits on the wrong scale puts the decision threshold in the wrong place. Admissibility is a threshold decision, so a report that leads with AUC hides exactly the failure that matters. A fifth, decision-level metric counts it directly: the fraction of candidates whose accept/reject answer changes across the gap, at a fixed threshold and at a source-optimal one, side by side.
 
 ## What is validated
 
-The estimator is checked against simulated data where the true gap is set by four independent dials — `mechanism` (the markers mean something different over there), `assay` (measured differently), `population` (different people), `noise` — each zero when source and target are identical. The acceptance criteria are automated tests rather than printed output:
+The estimator is checked against simulated data where the true gap is set by four independent dials, each zero when source and target are identical: `mechanism` (the markers mean something different over there), `assay` (measured differently), `population` (different people) and `noise`. The acceptance criteria are automated tests, not printed output:
 
 | Check | Result |
 | --- | --- |
@@ -45,11 +45,11 @@ The estimator is checked against simulated data where the true gap is set by fou
 | Sampling weights: a case-cohort subsample reproduces the full cohort | within Monte Carlo error |
 | Runtime, full synthetic suite | 13 seconds |
 
-Sampling weights are load-bearing rather than plumbing. Correlates datasets are routinely released as case-cohort or case-control subsamples, and ignoring the weights biases every estimate by a margin that is not small, so weighted fitting and weighted metrics have been in since the first commit.
+Sampling weights carry real weight here. Correlates datasets are routinely released as case-cohort or case-control subsamples, and ignoring the weights biases every estimate by a margin that is far from small, so weighted fitting and weighted metrics have been in since the first commit.
 
 ## Real data
 
-Experiment configs are committed for the gaps worth measuring first: the AMP bnAb trials (HVTN 703 and 704, split by trial — same product, two populations), HVTN 505 by age band, and the Hong Kong influenza B cohort by strain. Data access is the binding constraint rather than compute, and [`docs/data-access.md`](docs/data-access.md) is the live register of what is public, what needs an agreement, and what each route costs in events per side.
+Experiment configs are committed for the gaps worth measuring first: the AMP bnAb trials (HVTN 703 and 704, split by trial, so one product across two populations), HVTN 505 by age band, and the Hong Kong influenza B cohort by strain. Data access is the binding constraint here, not compute, and [`docs/data-access.md`](docs/data-access.md) is the live register of what is public, what needs an agreement, and what each route costs in events per side.
 
 No participant data is committed here, ever. Real data is analysed where it lives, under its own terms; `.gitignore` blocks the common formats as a backstop.
 
@@ -72,7 +72,7 @@ pip install -e ".[test]"
 pytest        # 73 tests
 ```
 
-[`SPEC.md`](SPEC.md) is the design and the source of truth for scope. [`docs/literature-review.md`](docs/literature-review.md) places the work: the field already distinguishes a correlate valid inside one trial from one valid across settings, and already has formal tools that take "how imperfect is the transport?" as an *input*. Estimating that input from data is the gap this fills.
+[`SPEC.md`](SPEC.md) is the design and the source of truth for scope. [`docs/literature-review.md`](docs/literature-review.md) places the work: vaccine statistics already distinguishes a correlate valid inside one trial from one valid across settings, and already has formal tools that take "how imperfect is the transport?" as an *input*. Nobody routinely estimates that input from data, which is the gap this fills.
 
 ## Scope
 
