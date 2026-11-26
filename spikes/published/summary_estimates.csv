@@ -1,0 +1,15 @@
+# Published per-study correlate estimates (summary level, no participant data).
+# log_hr and se are derived from the published HR and 95% CI: log(HR), (log(hi)-log(lo))/(2*1.96).
+# covid_*: HR of COVID-19 per 10-fold increase in the marker in vaccinees, US sites, harmonised assays (WHO IU),
+#   all four rows as tabulated together in Benkeser et al. 2023 npj Vaccines 8:36, Table 3 (PMC10005913).
+# include=0 rows are sensitivity variants, not used in the primary pool.
+family,study,platform,marker_timepoint,followup_days,hr,lo,hi,n_cases_marker,include,source
+covid_id50,COVE,mRNA,D57,126,0.42,0.27,0.65,36,1,Benkeser 2023 Table 3; Gilbert 2022 Science
+covid_id50,ENSEMBLE-US,Ad26,D29,83,0.38,0.13,1.12,29,1,Benkeser 2023 Table 3; Fong 2022 Nat Microbiol
+covid_id50,PREVENT-19,protein,D35,73,0.39,0.19,0.82,12,1,Benkeser 2023 Table 3; Fong 2023 Nat Commun
+covid_id50,AZD1222,ChAdOx1,D57,92,0.28,0.10,0.77,22,1,Benkeser 2023 Table 3 and Table 2A
+covid_id50_ensemble_all,ENSEMBLE-all-regions,Ad26,D29,54,0.49,0.29,0.81,92,0,Fong 2022 Table 2B (US+LatAm+SA; adjusted for region)
+covid_spike,COVE,mRNA,D57,126,0.66,0.50,0.88,36,1,Benkeser 2023 Table 3
+covid_spike,ENSEMBLE-US,Ad26,D29,83,0.62,0.28,1.37,29,1,Benkeser 2023 Table 3
+covid_spike,PREVENT-19,protein,D35,73,0.36,0.20,0.64,12,1,Benkeser 2023 Table 3
+covid_spike,AZD1222,ChAdOx1,D57,92,0.32,0.14,0.76,33,1,Benkeser 2023 Table 3 and Table 2A
