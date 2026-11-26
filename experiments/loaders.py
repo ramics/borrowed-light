@@ -238,6 +238,58 @@ def _with_pk(df: pd.DataFrame, vax: pd.DataFrame, pk: pd.DataFrame) -> pd.DataFr
     return schema.validate(out)
 
 
+PNG_PV_ANTIGENS = {"r3_5": "PvDBPIII_V", "sal1": "PvDBPII_Sal1", "ah": "PvDBPII_AH",
+                   "o": "PvDBPII_O", "p": "PvDBPII_P", "ebp": "PvEBPII"}
+
+
+def png_pv(path: str | Path, split: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Papua New Guinea P. vivax cohort (natural immunity, not a vaccine
+    trial): Zenodo record 4995749 / Dryad doi:10.5061/dryad.n14p52b,
+    ``DBP_data_fid.xlsx`` (or a CSV export of it).
+
+    One row per child (aged 1-4 at enrolment). Markers: baseline total IgG
+    (the release's transformed "dil" values, log10) to six PvDBP/PvEBP
+    antigens. Endpoint: any clinical P. vivax episode (``pv_500``) at a
+    follow-up visit after enrolment; episodes recorded at the enrolment visit
+    are not counted, because the marker is measured at that visit.
+    ``time_to_event`` is in follow-up visits (``fuwk``), the first visit with
+    an episode or the last visit attended. Full cohort, weights 1.
+
+    There is no placebo arm, so ``placebo_offset`` must be off.
+
+    ``split`` = {"column": "village_group"} (the Ilaita villages vs the rest)
+    or {"column": "village" | "age_yr", ...}; numeric columns take ``cut``.
+    """
+    path = Path(path)
+    raw = pd.read_excel(path) if path.suffix.lower() in (".xlsx", ".xls") else pd.read_csv(path)
+    v1 = {f"{a}_dil_igg_v1": f"marker_IgG_{name}" for a, name in PNG_PV_ANTIGENS.items()}
+    base = raw.groupby("fid").agg(village=("village", "first"), age_yr=("age_yr", "first"),
+                                  **{c: (c, "first") for c in v1})
+    fu = raw[raw["fuwk"] >= 1]
+    ep = fu[fu["pv_500"] > 0].groupby("fid")["fuwk"].min().rename("first_episode")
+    last = fu.groupby("fid")["fuwk"].max().rename("last_visit")
+    # Children without a baseline serology result (12 in the release) are
+    # dropped: complete-case, since they were not missing by design.
+    d = base.join(ep).join(last, how="inner").dropna(subset=list(v1))
+    d["village_group"] = np.where(d["village"].astype(str).str.startswith("Ilaita"), "Ilaita", "other")
+    col = split["column"]
+    d["stratum"] = stratify(d[col], split) if "cut" in split else d[col].astype(str)
+    y = d["first_episode"].notna().astype(int)
+    df = pd.DataFrame({
+        "participant_id": d.index.astype(str),
+        "study_id": "PNG_Pv",
+        "stratum": d["stratum"],
+        "platform": "natural immunity",
+        **{m: np.log10(d[c].astype(float)) for c, m in v1.items()},
+        "endpoint": y,
+        "time_to_event": d["first_episode"].fillna(d["last_visit"]).astype(float),
+        "sampling_weight": 1.0,
+        "phase2": 1,
+    }).reset_index(drop=True)
+    return schema.validate(df), pd.DataFrame(columns=["stratum", "events", "n"])
+
+
+
 HK_STRAIN = {1: "Perth", 2: "Perth", 3: "Victoria", 4: "Victoria"}
 HK_TITRE_FLOOR = 5  # the release codes "undetectable" (< 1:10) as 5
 
@@ -309,4 +361,4 @@ def hk_flu(path: str | Path, split: dict, cluster: str = "household",
     return schema.validate(df), placebo
 
 
-LOADERS = {"hvtn505": hvtn505, "amp": amp, "hk_flu": hk_flu}
+LOADERS = {"hvtn505": hvtn505, "amp": amp, "hk_flu": hk_flu, "png_pv": png_pv}

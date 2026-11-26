@@ -1,0 +1,16 @@
+# E2 on the PNG P. vivax cohort (natural immunity; Zenodo 4995749): fit in
+# the Ilaita villages, transfer to the other villages. Markers are baseline total
+# IgG to six PvDBP/PvEBP antigens; endpoint is a clinical P. vivax episode
+# after enrolment. Data path supplied at run time.
+experiment: e2_within_study
+dataset: png_pv
+split: {column: village_group}
+source: Ilaita
+target: other
+models: [ridge_logistic, single_marker, ridge_cox]
+baseline: cv
+folds: 5
+bootstrap_reps: 1000
+alpha: 0.05
+seed: 20261121
+placebo_offset: false   # no placebo arm
