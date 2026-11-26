@@ -31,11 +31,12 @@ Participant data stays outside the checkout, and a run reports aggregate numbers
 
 ![Forest plot of transfer attenuation across splits and trials](docs/figures/results_forest.png)
 
-- **Within-study splits (A):** one of six splits shows a real loss. In the PNG *P. vivax*
-  cohort, the antibody's effect largely vanishes between villages (attenuation +0.87 per SD
-  [+0.28, +1.46], permutation p = 0.004). Every other split covers zero, and none is
-  informative: HVTN 505 (≈12–14 cases a side) and AMP (no home signal, not shown) are
-  underpowered, and HK H3N2 cannot rule out total loss.
+- **Within-study splits (A): a correlate can lose almost all its predictive power across a
+  gap.** In the PNG *P. vivax* cohort (natural immunity), the antibody that predicts protection in Ilaita
+  loses nearly all of its effect in the other villages (attenuation +0.87 per SD, about 100%
+  of the home effect; 95% CI +0.28 to +1.46, permutation p = 0.004). The other five splits
+  are inconclusive, not reassuring. HVTN 505 has 12–14 cases a side, AMP has no home signal
+  (not shown), and HK H3N2's intervals are wide enough to include total loss.
 - **Between COVID-19 trials (B):** neutralising titre transfers across four platforms with no
   detectable penalty (between-trial SD τ ≈ 0, upper bound 0.49 per 10-fold). Spike IgG
   transfers less cleanly (τ = 0.26, COVE slope about half the others), but this is not
